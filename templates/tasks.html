@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Task Manager</title>
+    <style>
+        /* Basic styling for the task manager */
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f4;
+            margin: 0;
+            padding: 0;
+        }
+        .header {
+            background: #333;
+            color: #fff;
+            padding: 10px;
+            text-align: center;
+        }
+        .border {
+            margin: 20px;
+            padding: 20px;
+            background: #fff;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+        .task-item {
+            border-bottom: 1px solid #ddd;
+            padding: 10px 0;
+        }
+        .task-item:last-child {
+            border-bottom: none;
+        }
+        .btn {
+            display: inline-block;
+            padding: 10px 20px;
+            background: #007bff;
+            color: #fff;
+            text-decoration: none;
+            border-radius: 5px;
+            font-size: 16px;
+        }
+        .btn:hover {
+            background: #0056b3;
+        }
+    </style>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            if (Notification.permission !== 'granted') {
+                Notification.requestPermission();
+            }
+
+            function notifyMe(task) {
+                if (Notification.permission === 'granted') {
+                    const notification = new Notification('Task Reminder', {
+                        body: `Your task '${task.description}' is starting now!`,
+                    });
+
+                    notification.onclick = function() {
+                        window.open(window.location.href); // Open the website
+                    };
+                }
+            }
+
+            function checkTasks() {
+                fetch('/tasks/get')
+                    .then(response => response.json())
+                    .then(data => {
+                        const tasks = data.tasks;
+                        const now = new Date();
+                        const taskList = document.getElementById('task-list');
+
+                        // Clear the current list
+                        taskList.innerHTML = '';
+
+                        tasks.forEach(task => {
+                            // Ensure task start_time is a valid Date
+                            const taskTime = new Date(task.start_time);
+
+                            // Add task to the list
+                            const taskItem = document.createElement('div');
+                            taskItem.classList.add('task-item');
+                            taskItem.innerHTML = `
+                                <h3>${task.description}</h3>
+                                <p>Starts at: ${taskTime.toLocaleString()}</p>
+                                <p>Duration: ${task.duration} minutes</p>
+                            `;
+                            taskList.appendChild(taskItem);
+
+                            // Notify if the task is starting within a minute
+                            if (Math.abs(taskTime - now) < 60000) { // Task is starting within a minute
+                                notifyMe(task);
+                            }
+                        });
+                    })
+                    .catch(error => console.error('Error fetching tasks:', error));
+            }
+
+            // Check tasks every minute
+            setInterval(checkTasks, 60000);
+            // Initial load
+            checkTasks();
+        });
+    </script>
+</head>
+<body>
+    <div class="header">
+        <h1 class="word">Task Manager</h1>
+    </div>
+    <div class="border">
+        <h2 class="word">Your Tasks</h2>
+        <div id="task-list">
+            <!-- Task list will be dynamically populated here -->
+        </div>
+        <a href="/tasks/create" class="btn">Create New Task</a>
+    </div>
+</body>
+</html>
