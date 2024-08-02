@@ -7,6 +7,7 @@ import re
 import time
 import logging
 from winotify import Notification, audio
+
 app = Flask(__name__)
 
 app.secret_key = 'your secret key'
@@ -20,6 +21,8 @@ mysql = MySQL(app)
 scheduler = BackgroundScheduler()
 scheduler.start()
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s %(levelname)s: %(message)s')
+
+
 class Task:
     def __init__(self, description, start_time, duration, user_id=None, id=None):
         self.description = description
@@ -56,6 +59,7 @@ class Task:
         if self.id:
             cursor.execute('DELETE FROM tasks WHERE id = %s', (self.id,))
 
+
 @app.route('/')
 @app.route('/login', methods=['GET', 'POST'])
 def login():
@@ -84,6 +88,7 @@ def logout():
     session.pop('username', None)
     return redirect(url_for('login'))
 
+
 @app.route('/tasks')
 def tasks():
     if 'loggedin' in session:
@@ -92,6 +97,7 @@ def tasks():
         tasks = cursor.fetchall()
         return render_template('tasks.html', tasks=tasks)
     return redirect(url_for('login'))
+
 
 @app.route('/tasks/get')
 def get_tasks():
@@ -103,6 +109,7 @@ def get_tasks():
         cursor.close()
         return jsonify({"tasks": tasks})  # Ensure this is the correct format
     return jsonify({"tasks": []})  # Return empty tasks if not logged in
+
 
 @app.route('/tasks/create', methods=['GET', 'POST'])
 def create_task():
@@ -171,6 +178,7 @@ def check_tasks():
         for task in ending_tasks:
             notify_user(task['user_id'], task['description'], "end")
 
+
 def notify_user(user_id, task_description, notification_type):
     try:
         cursor = mysql.connection.cursor(MySQLdb.cursors.DictCursor)
@@ -180,7 +188,7 @@ def notify_user(user_id, task_description, notification_type):
 
         if user:
             title = "Task Notification"
-            if(notification_type == "start"):
+            if (notification_type == "start"):
                 msg = f"Your task '{task_description}' is starting now."
                 icon = r"C:\Users\Anirudh\Documents\GitHub\RegistrationAndLogin\Starting.png"
             else:
@@ -204,7 +212,6 @@ def notify_user(user_id, task_description, notification_type):
         logging.error(f"Error notifying user: {e}")
 
 
-
 @app.route('/tasks/get_notifications')
 def get_notifications():
     cursor = mysql.connection.cursor(MySQLdb.cursors.DictCursor)
@@ -214,7 +221,51 @@ def get_notifications():
     cursor.close()
     return jsonify(tasks=tasks)
 
+
 scheduler.add_job(check_tasks, 'interval', minutes=1)
+
+
+@app.route('/tasks/extend/<int:task_id>', methods=['POST'])
+def extend_task(task_id):
+    if 'loggedin' in session:
+        cursor = mysql.connection.cursor(MySQLdb.cursors.DictCursor)
+
+        # Fetch the task details
+        cursor.execute('SELECT * FROM tasks WHERE id = %s AND user_id = %s', (task_id, session['id']))
+        task = cursor.fetchone()
+
+        if task:
+            # Calculate time remaining
+            end_time = task['start_time'] + timedelta(minutes=task['duration'])
+
+            time_remaining = (end_time - datetime.now()).total_seconds() / 60  # in minutes
+            print(f"Current time: {datetime.now()}")
+            print(f"Task end time: {end_time}")
+            print(f"Time remaining: {time_remaining} minutes")
+            if time_remaining <= 10 and not task['completed']:
+                # Extend the task by 10 minutes or any desired duration
+                new_duration = task['duration'] + 10
+                cursor.execute('UPDATE tasks SET duration = %s WHERE id = %s', (new_duration, task_id))
+                mysql.connection.commit()
+                return jsonify({"status": "success", "message": "Task duration extended."})
+            else:
+                return jsonify({"status": "fail", "message": "Task cannot be extended."})
+
+        return jsonify({"status": "fail", "message": "Task not found or unauthorized."})
+
+    return redirect(url_for('login'))
+
+
+def schedule_task_deletion(task_id, delay_minutes):
+    scheduler.add_job(delete_task, 'date', run_date=datetime.now() + timedelta(minutes=delay_minutes), args=[task_id])
+
+def delete_task(task_id):
+    with app.app_context():
+        cursor = mysql.connection.cursor(MySQLdb.cursors.DictCursor)
+        cursor.execute('DELETE FROM tasks WHERE id = %s', (task_id,))
+        mysql.connection.commit()
+        cursor.close()
+        logging.info(f"Task with ID {task_id} deleted.")
 
 
 if __name__ == '__main__':

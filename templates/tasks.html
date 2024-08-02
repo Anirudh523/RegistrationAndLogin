@@ -27,6 +27,7 @@
         .task-item {
             border-bottom: 1px solid #ddd;
             padding: 10px 0;
+            position: relative;
         }
         .task-item:last-child {
             border-bottom: none;
@@ -42,6 +43,17 @@
         }
         .btn:hover {
             background: #0056b3;
+        }
+        .add-time {
+            position: absolute;
+            right: 10px;
+            top: 10px;
+            cursor: pointer;
+            font-size: 24px;
+            color: #007bff;
+        }
+        .add-time:hover {
+            color: #0056b3;
         }
     </style>
     <script>
@@ -76,6 +88,8 @@
                         tasks.forEach(task => {
                             // Ensure task start_time is a valid Date
                             const taskTime = new Date(task.start_time);
+                            const durationEnd = new Date(task.start_time);
+                            durationEnd.setMinutes(durationEnd.getMinutes() + task.duration);
 
                             // Add task to the list
                             const taskItem = document.createElement('div');
@@ -84,6 +98,7 @@
                                 <h3>${task.description}</h3>
                                 <p>Starts at: ${taskTime.toLocaleString()}</p>
                                 <p>Duration: ${task.duration} minutes</p>
+                                <span class="add-time" onclick="promptExtendTask(${task.id}, ${task.duration}, '${task.start_time}')">+</span>
                             `;
                             taskList.appendChild(taskItem);
 
@@ -95,6 +110,34 @@
                     })
                     .catch(error => console.error('Error fetching tasks:', error));
             }
+
+            window.promptExtendTask = function(taskId, currentDuration, startTime) {
+                const now = new Date();
+                const endTime = new Date(startTime);
+                endTime.setMinutes(endTime.getMinutes() + currentDuration);
+                const timeRemaining = (endTime - now) / 60000; // timeRemaining in minutes
+
+                if (timeRemaining < 10) {
+                    const extendMinutes = prompt("Less than 10 minutes remaining. How many minutes would you like to extend?");
+                    if (extendMinutes !== null && !isNaN(extendMinutes)) {
+                        fetch(`/tasks/extend/${taskId}`, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({ minutes: parseInt(extendMinutes) })
+                        }).then(response => {
+                            if (response.ok) {
+                                checkTasks();
+                            } else {
+                                alert("Failed to extend the task.");
+                            }
+                        });
+                    }
+                } else {
+                    alert("You can only extend the task if less than 10 minutes are remaining.");
+                }
+            };
 
             // Check tasks every minute
             setInterval(checkTasks, 60000);
